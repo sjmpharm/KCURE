@@ -1,9 +1,10 @@
+# STEP 0. 세션 준비 + 사전 확인
+
+```sas
 /*==================================================
   KC20260325001 ICI 코호트 STEP 01  (최종본)
   2026-07-27
 ==================================================*/
-
-/*===== STEP 0. 세션 준비 =====*/
 libname kcure "/home/sasuser/project/kc20260325001/src/data";
 options dlcreatedir;
 libname out "/home/sasuser/out";
@@ -18,7 +19,6 @@ ods rtf   file="/home/sasuser/out/RESULT_step01_0727.rtf" bodytitle;
 ods excel file="/home/sasuser/out/RESULT_step01_0727.xlsx"
           options(sheet_interval="proc" embedded_titles="yes");
 
-/*----- 0-1. 테이블 목록 (파티션 확인) -----*/
 title1 "0-1. KCURE 테이블 목록";
 proc sql;
   select memname, nobs, nvar
@@ -27,7 +27,6 @@ proc sql;
   order by memname;
 quit;
 
-/*----- 0-2. ★ 조직형 실제 값 (블로커 판정) -----*/
 title1 "0-2. RGST 변수 목록";
 proc contents data=kcure.kc20260325001_rgst varnum; run;
 
@@ -36,8 +35,7 @@ proc freq data=kcure.kc20260325001_rgst order=freq;
   tables MCODE_GRP / missing;
 run;
 
-/*----- 0-2c. ★★ GATE : 45코드가 실제로 매칭되는지 사전 확인 -----*/
-title1 "0-2c. ★★ GATE - 45코드 매칭 레코드 수 (0이면 STEP 1 진행 금지)";
+title1 "0-2c. ★★ GATE - 45코드 매칭 레코드 수 (0이면 진행 금지)";
 proc sql;
   select sum(upcase(strip(cats(MCODE_GRP))) in (
            '80203','80213','80223',
@@ -52,17 +50,55 @@ proc sql;
            '89723','89733')) as n_match_45
   from kcure.kc20260325001_rgst;
 quit;
+```
 
-/*  ★★ 판정 - 여기서 멈추고 결정할 것
-    n_match_45 > 0   -> STEP 1 진행
-    n_match_45 = 0   -> 진행 금지. STEP 1~11 전부 0건이 됨.
-                        0-2b 값 보고 요청그룹 코드로 STEP 1-2 교체 후 재실행
-    MCODE 컬럼 별도  -> keep= 과 mcode= 를 MCODE 로 변경                   */
+**⚠ `out.test` 에러 →** 경로를 `/home/sasuser/project/kc20260325001/out` 로 변경. 둘 다 안 되면 분석관 문의
 
+**⚠ `ods excel` 에러 →** 그 줄만 삭제하고 rtf만 사용
 
-/*===== STEP 1. NSCLC 코호트 =====*/
+## 표 0. 환경 기록
 
-/*----- 1-1. 결측 판정 + 분리 -----*/
+| 항목 | 기록 |
+|---|---|
+| 쓰기 가능 경로 | |
+| 다음 방문까지 파일 유지? | |
+| ods excel 작동? | |
+| 반출 최소 셀 크기 제한 | |
+
+## 표 0-1. 테이블 목록
+
+T200 / T300 / T400 / T530 **파티션이 빠진 게 없는지** 확인
+
+| 테이블명 | nobs | nvar |
+|---|---|---|
+| | | |
+| | | |
+| | | |
+| | | |
+| | | |
+| | | |
+| | | |
+| | | |
+
+## ★★ 표 0-2. 조직형 GATE — 여기서 멈추고 판정
+
+**⚠ 이 판정을 건너뛰고 계속 돌리면 STEP 1부터 STEP 11까지 전부 0건이 나옵니다. 반드시 여기서 확인하세요**
+
+| `n_match_45` (0-2c 결과) | 판정 | 조치 |
+|---|---|---|
+| 0 보다 큼 | 진행 | STEP 1로 |
+| **0** | **진행 금지** | 0-2b 값 보고 요청그룹 코드로 STEP 1-2 교체 후 재실행 |
+| `MCODE` 컬럼이 따로 있음 | 수정 후 진행 | `keep=` 과 `mcode=` 를 `MCODE` 로 변경 |
+
+**기록:** MCODE_GRP 실제 값 = ________________
+
+**기록:** `n_match_45` = ________________ / 진행 여부 = ________________
+
+# STEP 1. NSCLC 코호트
+
+## 1-1. 결측 판정 + 분리
+
+```sas
 data nsclc_all nsclc_drop;
   set kcure.kc20260325001_rgst(keep=SNKEY MCODE_GRP FDX);
   length mcode $8;
@@ -88,8 +124,20 @@ quit;
 
 title1 "A-2. FDX 결측 (제외 안 함, 기록만)";
 proc freq data=nsclc_all; tables miss_fdx / out=out.a2_missfdx; run;
+```
 
-/*----- 1-2. 45개 조직형 코드 양성 선택 -----*/
+## 표 A. 결측·제외
+
+| 사유 | n |
+|---|---|
+| SNKEY 결측 | |
+| 조직형(MCODE) 결측 | |
+| **구조적 제외 소계** | |
+| FDX 결측 (제외 안 함) | |
+
+## 1-2. 45개 조직형 코드 양성 선택
+
+```sas
 data nsclc_sel;
   set nsclc_all;
   if mcode in (
@@ -110,8 +158,11 @@ title1 "B-1. 조직형 코드별 레코드 빈도";
 proc freq data=nsclc_sel order=freq;
   tables mcode / out=out.b1_mcode;
 run;
+```
 
-/*----- 1-3. 환자당 중복 레코드 -----*/
+## 1-3. 환자당 중복 레코드
+
+```sas
 proc sql;
   create table dup_chk as
   select SNKEY, count(*) as n_rec from nsclc_sel group by SNKEY;
@@ -119,8 +170,11 @@ quit;
 
 title1 "B-2. 환자당 NSCLC 레코드 수 분포";
 proc freq data=dup_chk; tables n_rec / out=out.b2_dup; run;
+```
 
-/*----- 1-4. 환자별 최초진단 1건 (FDX 결측은 뒤로) -----*/
+## 1-4. 환자별 최초진단 1건 (FDX 결측은 뒤로)
+
+```sas
 data nsclc_sel2;
   set nsclc_sel;
   srt = ifn(missing(fdx_ymd), 99999999, fdx_ymd);
@@ -138,9 +192,24 @@ title1 "B-3. NSCLC 코호트 최종 인원";
 proc sql; select count(*) as N_nsclc from nsclc_cohort; quit;
 
 data out.nsclc_cohort; set nsclc_cohort; run;
+```
 
+## 표 B. NSCLC 코호트
 
-/*===== STEP 2. T200 제한 =====*/
+| 항목 | n |
+|---|---|
+| RGST 전체 레코드 | |
+| 구조적 결측 제외 후 | |
+| 45코드 해당 레코드 | |
+| 45코드 해당 환자(SNKEY) | |
+| **최초진단 1건 정리 후 (코호트)** | |
+| 0건인 코드 (목록 적기) | |
+
+**중복 분포:** 1건 ______ / 2건 ______ / 3건+ ______ → 2건 이상 ______ %
+
+# STEP 2. T200 제한
+
+```sas
 proc sql;
   create table t200_sub as
   select b.SNKEY, b.fdx_ymd, b.mcode,
@@ -156,9 +225,20 @@ quit;
 
 title1 "C-1. T200 제한 후 청구 건수 및 날짜 결측";
 proc means data=t200_sub n nmiss maxdec=0; var ymd; run;
+```
 
+## 표 C-1
 
-/*===== STEP 3. ICI 청구 추출 =====*/
+| 항목 | n |
+|---|---|
+| T200 제한 후 청구 건수 | |
+| `ymd` 결측 (0이어야 정상) | |
+
+**⚠ 표 0-1에 T200 파티션이 더 있으면** 이 `from` 절에 union 추가 필요
+
+# STEP 3. ICI 청구 추출
+
+```sas
 data t300_ici;
   set kcure.kc20260325001_t300_1517
       kcure.kc20260325001_t300_1820
@@ -189,15 +269,27 @@ proc sql;
 quit;
 
 data out.ici_claims; set ici_claims; run;
+```
 
+## 표 C-2. 연결
 
-/*===== STEP 4. 환자별 최초 ICI = index =====*/
+| 항목 | n |
+|---|---|
+| T300 ICI — atezo (6577) | |
+| T300 ICI — nivo (6384) | |
+| T300 ICI — pembro (6390) | |
+| MID 조인 후 청구 건수 | |
+| **ICI 환자 (distinct SNKEY)** | |
 
-/*  주의: code4 정렬은 6384(nivo) < 6390(pembro) < 6577(atezo) 이므로
-    동시 청구를 정렬 순으로 뽑으면 atezo가 체계적으로 밀림.
-    -> index date에 2종 이상이면 "시작 약제 판정 불가"로 보고 환자 제외.   */
+**⚠ 셋 중 0이 있으면** GNL_CD 4자리 가정이 틀린 것. 원본에서 `substr(GNL_CD,1,4)` 분포 확인
 
-/*----- D-0. index date 동시 2종 판정 -----*/
+# STEP 4. 환자별 최초 ICI = index
+
+**⚠ code4 정렬 순서는 6384(nivo) < 6390(pembro) < 6577(atezo). 동시 청구를 정렬 순으로 뽑으면 atezo가 체계적으로 밀립니다. 그래서 index date에 2종 이상이면 시작 약제 판정 불가로 보고 환자를 제외합니다**
+
+## D-0. index date 동시 2종 판정
+
+```sas
 proc sql;
   create table first_dt as
   select SNKEY, min(ymd) as index_ymd
@@ -220,8 +312,11 @@ proc sql;
     (select SNKEY from ici_claims group by SNKEY, ymd
      having count(distinct code4) > 1);
 quit;
+```
 
-/*----- D-1. 최초 ICI 행 채택 + 동시 2종 제외 -----*/
+## D-1. 최초 ICI 행 채택 + 동시 2종 제외
+
+```sas
 proc sort data=ici_claims; by SNKEY ymd code4; run;
 
 data ici_index;
@@ -240,9 +335,24 @@ run;
 
 title1 "D-1. 약제별 환자 N (index 기준)";
 proc freq data=ici_index; tables index_drug / out=out.d1_drug; run;
+```
 
+## 표 D
 
-/*===== STEP 5. 기간 제한 + 정책 전후 =====*/
+| 항목 | n |
+|---|---|
+| **index date 동시 2종 (제외됨)** | |
+| 추적 중 아무 날 동시 2종 (참고) | |
+| Nivolumab | |
+| Pembrolizumab | |
+| Atezolizumab | |
+| 계 | |
+
+**→ 제외 인원이 많으면** (예: 전체의 3% 초과) 논문 Limitation에 기술 필요. 인원 = ______ ( ______ %)
+
+# STEP 5. 기간 제한 + 정책 전후
+
+```sas
 data cohort_final;
   set ici_index;
   if 20170821 <= index_ymd <= 20211231;
@@ -260,9 +370,11 @@ data cohort_final;
 run;
 
 data out.cohort_final; set cohort_final; run;
+```
 
+# STEP 6. Attrition + 약제 × 기간
 
-/*===== STEP 6. Attrition + ★ 약제 x 기간 =====*/
+```sas
 title1 "E-1. 코호트 구축 단계별 인원 (Table S0)";
 proc sql;
   create table out.e1_attr as
@@ -282,8 +394,25 @@ proc freq data=cohort_final;
   tables index_drug*period / out=out.e2_drugperiod;
   tables ctrl*period       / out=out.e3_ctrlperiod;
 run;
+```
 
-/*----- 여기까지가 최우선 숫자. 중간 에러로 rtf 못 여는 사고 방지용 분할 -----*/
+## 표 E-1. Attrition (Table S0)
+
+| 단계 | n | 제외 n |
+|---|---|---|
+| a. RGST 전체 레코드 | | — |
+| b. 구조적 결측 제외 | | |
+| c. NSCLC 45코드 레코드 | | |
+| d. NSCLC 환자 | | |
+| e. ICI 청구 있음 | | |
+| e2. 동시 2종 제외 후 | | |
+| f. **최종 코호트** | | |
+
+## ★ 결과 파일 한 번 끊기
+
+**여기까지가 최우선 숫자입니다. 뒤에서 에러 나면 rtf가 안 열리므로 지금 한 번 닫고 새로 엽니다**
+
+```sas
 title;
 ods excel close;
 ods rtf close;
@@ -291,9 +420,25 @@ ods rtf close;
 ods rtf   file="/home/sasuser/out/RESULT_step01b_0727.rtf" bodytitle;
 ods excel file="/home/sasuser/out/RESULT_step01b_0727.xlsx"
           options(sheet_interval="proc" embedded_titles="yes");
+```
 
+**→ 이 시점에 `RESULT_step01_0727.rtf` 열어서 표 E-1 · E-2 숫자 확인하고 손으로 적기**
 
-/*===== STEP 7. 분기별 추이 (Table S1) =====*/
+## ★ 표 E-2. 약제 × 기간 (최우선)
+
+| | P1 (~19-07-22) | P2 (19-07-23~) | 계 |
+|---|---|---|---|
+| Nivolumab | | | |
+| Pembrolizumab | | | |
+| **Atezolizumab** | | | |
+| Control pooled | | | |
+| 계 | | | |
+
+**★ 판정:** atezo P1 = ________ → 30 이상? ________ / event-study 가능? ________
+
+# STEP 7. 분기별 추이 (Table S1)
+
+```sas
 title1 "F-1. 분기별 index ICI initiator";
 proc freq data=cohort_final;
   tables yq*index_drug / out=out.f1_quarter;
@@ -304,9 +449,36 @@ proc tabulate data=cohort_final;
   class yq index_drug;
   table yq, index_drug*n all*n / rts=14;
 run;
+```
 
+## 표 F. Table S1
 
-/*===== STEP 8. BFC 연도 매칭 (★ 1:1 확인) =====*/
+| Quarter | Nivo | Pembro | Atezo | 계 |
+|---|---|---|---|---|
+| 2017 Q3 | | | – | |
+| 2017 Q4 | | | – | |
+| 2018 Q1 | | | | |
+| 2018 Q2 | | | | |
+| 2018 Q3 | | | | |
+| 2018 Q4 | | | | |
+| 2019 Q1 | | | | |
+| 2019 Q2 | | | | |
+| **2019 Q3 ← 정책** | | | | |
+| 2019 Q4 | | | | |
+| 2020 Q1 | | | | |
+| 2020 Q2 | | | | |
+| 2020 Q3 | | | | |
+| 2020 Q4 | | | | |
+| 2021 Q1 | | | | |
+| 2021 Q2 | | | | |
+| 2021 Q3 | | | | |
+| 2021 Q4 | | | | |
+
+**메모:** atezo 최저 ______ → 최고 ______ ( ______ 배 증가)
+
+# STEP 8. BFC 연도 매칭
+
+```sas
 proc sql;
   create table bfc_chk as
   select SNKEY, count(*) as n_yr
@@ -332,11 +504,21 @@ proc sql;
   select count(*) as n_rows, count(distinct SNKEY) as n_pts
   from cohort_bfc;
 quit;
+```
 
-/*  다르면 여기서 멈추고 원인 확인. 진행하면 사회경제 변수 전부 뻥튀기. */
+## 표 G. BFC 매칭
 
+| 항목 | 기록 | 판정 |
+|---|---|---|
+| BFC 환자당 레코드 최대 | | |
+| `n_rows` | | |
+| `n_pts` | | 같아야 정상 |
 
-/*===== STEP 9. 파생변수 + 결측 기록 =====*/
+**⚠ 다르면 여기서 멈추고 원인 확인.** 진행하면 사회경제 변수 전부 뻥튀기됨
+
+# STEP 9. 파생변수 + 결측 기록
+
+```sas
 data cohort_flag;
   set cohort_bfc;
 
@@ -424,9 +606,28 @@ proc freq data=cohort_flag;
 run;
 
 data out.cohort_flag; set cohort_flag; run;
+```
 
+## 표 H. 결측 (빼지 않고 기록)
 
-/*===== STEP 10. Table 1 - 사회경제·거주 =====*/
+| 변수 | atezo P1 | atezo P2 | ctrl P1 | ctrl P2 |
+|---|---|---|---|---|
+| GAIBJA_TYPE 결측 | | | | |
+| SIDO_CD 결측 | | | | |
+| 보험료 결측 | | | | |
+| 가구원수 결측 | | | | |
+| MAIDCL_CD 미지정 | | | | |
+| PAT_AGE 결측 | | | | |
+| FDX 결측 | | | | |
+| STD_YYYY 미매칭 | | | | |
+| **complete-case n** | | | | |
+| 코호트 전체 n | | | | |
+
+**⚠ atezo P1의 결측률이 유독 높으면** complete-case가 DiD를 왜곡. Unknown 유지 방침으로
+
+# STEP 10. Table 1 — 사회경제·거주
+
+```sas
 title1 "I-1. 사회경제·거주 특성 (약제 x 기간)";
 ods output CrossTabFreqs=out.i1_ses;
 proc freq data=cohort_flag;
@@ -442,11 +643,39 @@ proc means data=cohort_flag median q1 q3 maxdec=1;
   var PAT_AGE;
   output out=out.i2_age median=med q1=q1 q3=q3;
 run;
+```
 
+## 표 I. Table 1 (4/4)
 
-/*===== STEP 11. 반출 대비 - 5 미만 셀 =====
-   데이터셋마다 변수 구조가 달라 SET 병합은 위험. 따로 출력.        */
+| 변수 | atezo P1 | atezo P2 | ctrl P1 | ctrl P2 |
+|---|---|---|---|---|
+| **의료급여** | | | | |
+| 1종 | | | | |
+| 2종 | | | | |
+| 차상위 | | | | |
+| 직장 | | | | |
+| 지역 | | | | |
+| 보험료 0 (의료급여) | | | | |
+| 1–2분위 | | | | |
+| 3–4분위 | | | | |
+| 5–6분위 | | | | |
+| 7–8분위 | | | | |
+| 9–10분위 | | | | |
+| 보험료 Unknown | | | | |
+| 1인 가구 | | | | |
+| **비수도권** | | | | |
+| 서울 | | | | |
+| 인천·경기 | | | | |
+| 광역시 | | | | |
+| 도·세종·제주 | | | | |
+| **70세 이상** | | | | |
+| 연령 중앙값 (IQR) | | | | |
 
+# STEP 11. 반출 대비 — 5 미만 셀
+
+**⚠ 데이터셋마다 변수 구조가 달라서 SET 병합은 에러 납니다. 따로 출력하세요**
+
+```sas
 title1 "Z-0. ODS OUTPUT 변수명 확인 (Frequency 맞는지)";
 proc contents data=out.i1_ses varnum; run;
 
@@ -469,11 +698,87 @@ title1 "Z-1d. 결측 - 5 미만";
 proc print data=out.h1_missing noobs;
   where 0 < Frequency < 5;
 run;
+```
 
+**⚠ Z-1c / Z-1d 가 에러 나면** Z-0 결과에서 빈도 변수의 실제 이름을 확인하고 `Frequency` 를 그 이름으로 교체
 
-/*===== STEP 12. 결과 파일 닫기 (필수) =====*/
+## 표 Z. 반출 걸릴 셀
+
+| 출처 표 | 어떤 셀 | count |
+|---|---|---|
+| | | |
+| | | |
+| | | |
+| | | |
+| | | |
+
+**→ 병합 전략 메모:** ______________________________________________
+
+# STEP 12. 결과 파일 닫기 (필수)
+
+```sas
 title;
 ods excel close;
 ods rtf close;
 
 proc datasets library=out; run;
+```
+
+**⚠ 이거 안 하면 rtf / xlsx 파일이 안 열립니다**
+
+# 마무리 체크리스트
+
+## 오늘 끝에 남아야 할 것
+
+| 산출물 | 내용 | 확인 |
+|---|---|---|
+| `kcure_step01_cohort_0727.sas` | 코드 전체 (Ctrl+S 저장) | |
+| `RESULT_step01_0727.rtf` | STEP 0~6 결과 (attrition·약제×기간) | |
+| `RESULT_step01b_0727.rtf` | STEP 7~11 결과 | |
+| `RESULT_step01_0727.xlsx` / `01b` | 같은 결과, proc별 시트 | |
+| `out.nsclc_cohort` | NSCLC 코호트 | |
+| `out.ici_claims` | ICI 청구 | |
+| `out.cohort_final` | 최종 코호트 | |
+| `out.cohort_flag` | 파생변수·결측 포함 (다음엔 이것만 사용) | |
+| `out.e1_attr` 등 표 데이터셋 | e2_drugperiod, f1_quarter, h1_missing, i1_ses, z1_smallcell | |
+
+## 손으로도 반드시 적을 것
+
+| 표 | 내용 | 적었나 |
+|---|---|---|
+| 표 0-2 | **조직형 GATE** — `n_match_45` | |
+| 표 D | 동시 2종 제외 인원 | |
+| 표 E-1 | Attrition | |
+| 표 E-2 | **약제 × 기간 — atezo P1** | |
+| 표 F | 분기별 추이 | |
+| 표 H | 결측 현황 | |
+| 표 Z | 5 미만 셀 | |
+
+## 막히면 볼 곳 4개
+
+| 증상 | 원인 | 확인할 표 |
+|---|---|---|
+| STEP 1이 0건 | 조직형 변수가 그룹값 | 표 0-2 — GATE에서 이미 걸러짐 |
+| STEP 2가 0건 | T200 파티션 누락 | 표 0-1 |
+| `n_rows` ≠ `n_pts` | BFC 연도 중복 | 표 G — 멈추고 확인 |
+| Z-1c / Z-1d 에러 | 빈도 변수명이 `Frequency` 아님 | Z-0 결과에서 실제 이름 확인 |
+
+## 돌아와서 같이 정할 것
+
+**atezo P1 N (표 E-2)** 이 핵심입니다.
+
+| atezo P1 | 방향 |
+|---|---|
+| 30 이상 | event-study 포함 DiD 그대로 진행 |
+| 30 미만 | pre / post 단순비교로 전환 검토 |
+
+## 다음 방문 때 이어서
+
+```sas
+libname kcure "/home/sasuser/project/kc20260325001/src/data";
+libname out "/home/sasuser/out";
+
+proc datasets library=out; run;
+proc print data=out.e1_attr noobs; run;
+proc freq  data=out.cohort_flag; tables index_drug*period; run;
+```
